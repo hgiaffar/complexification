@@ -1,26 +1,18 @@
-%% Must fix issue - if connection probability is too low, end up with disconnected nodes
-% one way to deal would be to add a self loop? or require a single connection to define a vertex (organism must be connected)
+%% 
 
 clear all
 
 T = 2500;           % length of simulation
+et = 100;           % number of steps during which enviroment is constant
 no_orgs = 100;       % no organisms
 Kc = 1;              % number of k-cycle selections per timestep
-no_data_points = 4;
+no_data_points = 3;
 
 % simulated data must be normalised
-if 1
-    environment = [zeros(no_data_points/2,T); 0.8*ones(no_data_points/2, T)];
-    environment = abs(environment + 0.05*randn(no_data_points, T));
-    environment = environment ./ repmat(sum(environment), [no_data_points 1]);
-else
-    environment = ones(no_data_points,T);
-    environment = environment ./ repmat(sum(environment), [no_data_points 1]);
+[environment] = generate_environment(no_data_points, 'simple', T)
 
-end
-
-nx = 2;            % visible units 
-mx = 2;
+nx = 3;            % visible units 
+mx = 1;
 beta = 10;
 eps = 1e-8;
 eta = 0.005;
@@ -34,7 +26,7 @@ no_hidden_units = 5;
 graph_density = 1;
 
 form = 'unstructured';
-steps = 1,
+steps = 1;
 lr = 0.00005;
 
 population = struct();
@@ -53,6 +45,8 @@ c = 1;
 cc = 0;
 
 for t = 1 : T
+    
+    if t == 1
         
     % interaction with environment - compute fitness
     data = environment(:,t);

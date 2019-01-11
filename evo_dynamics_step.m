@@ -18,6 +18,7 @@ switch dynamics
         beta = varargin{4};
         varop = varargin{5};
         
+        
         ind_death = randi(no_orgs, [K 1]);
         
         for ki = 1 : K
@@ -26,8 +27,9 @@ switch dynamics
             % fitness proportionate selection
             ind_repro = RouletteWheelSelection(pop_fitness);  
 %             ind_repro = find(pop_fitness==max(pop_fitness));
-                
             repro_org = population(ind_repro).organism;
+            
+            % must fix varop 2:3 - have changed in the relevant files...
             
             switch varop
                 case 1
@@ -46,11 +48,10 @@ switch dynamics
                 case 4
                     form = varargin{6};
                     P = varargin{7};
-                    data = varargin{8};
-                    steps = varargin{9};
-                    lr = varargin{10};
-                    population(ind_death(ki)).organism = var_operator_distributed(repro_org, form, 1, eps, eta, beta, P, data, steps, lr);
-                    
+                    copdelP = varargin{8};
+                    numn = varargin{9};
+                    population(ind_death(ki)).organism = var_operator_distributed(repro_org, form, numn, eps, eta, beta, P, copdelP);
+
             end
         end       
                       

@@ -49,8 +49,6 @@ classdef organism
             obj.weights = T;
             obj.transition_matrix = V;
             obj.adjacency = A;
-
-            obj.genotype_complexity = length(find(obj.adjacency(:)));
             
         end
         
@@ -67,9 +65,6 @@ classdef organism
             obj.weights(indx(1), indx(2)) = abs(min(obj.weights(indx(1), indx(2)), wmax));               % bound weights
             
             obj = update_transitions(obj, indx, eps, beta);
-
-            obj.genotype_complexity = length(find(obj.adjacency(:)));
-
         end
 
         
@@ -94,9 +89,6 @@ classdef organism
                     obj.adjacency(ri(indx), ci(indx)) = 0;
                     obj = update_transitions(obj, 0, eps, beta);
             end                    
-
-            obj.genotype_complexity = length(find(obj.adjacency(:)));
-
         end  
         
         
@@ -176,42 +168,34 @@ classdef organism
                     
                 case -1             % delete substructure
                     
-                    if numn <= obj.num_hidden_nodes
+                    if obj.num_hidden_nodes = 0
+                        break 
+                    elseif numn >= obj.num_hidden_nodes
                         ind_copy = randperm(obj.num_hidden_nodes, numn) + length(obj.stat_dist);
-                        obj.weights(ind_copy, :) = [];
-                        obj.weights(:, ind_copy) = [];
-                        obj.adjacency(ind_copy, :) = [];                        
-                        obj.adjacency(:, ind_copy) = [];                        
+                        obj.weights(ind_copy, ind_copy) = [];
+                        obj.adjacency(ind_copy, ind_copy) = [];                        
                         obj = update_transitions(obj, 0, eps, beta);
                         obj.num_hidden_nodes = obj.num_hidden_nodes - numn;
                     else
                         numn = obj.num_hidden_nodes;
                         ind_copy = randperm(obj.num_hidden_nodes, numn) + length(obj.stat_dist);
-                        obj.weights(ind_copy, :) = [];
-                        obj.weights(:, ind_copy) = [];
-                        obj.adjacency(ind_copy, :) = [];                                                
-                        obj.adjacency(:, ind_copy) = [];                                                
+                        obj.weights(ind_copy, ind_copy) = [];
+                        obj.adjacency(ind_copy, ind_copy) = [];                                                
                         obj = update_transitions(obj, 0, eps, beta);
                         obj.num_hidden_nodes = obj.num_hidden_nodes - numn;                  
                     end
                 end
-
-            obj.genotype_complexity = length(find(obj.adjacency(:)));
-
         end
         
         
         
-        function [obj] = var_operator_distributed(obj, form, numn, eps, eta, beta, P, copdelP)
+        function [obj] = var_operator_distributed(obj, form, numn, eps, eta, beta, copdel, varargin)
             % select above variational operators based on distribution P
             % form: structured vs unstructured
             % P - probability distribution over other operators in order
-            % Pcopdel is the Pdist over delete/copy 
             
-            indy = RouletteWheelSelection(copdelP);
-            if indy == 1, copdel = -1; elseif indy == 2, copdel = 1; end 
-            
-            indx = RouletteWheelSelection(P);
+                        indx = RouletteWheelSelection(P);
+
                         
             switch indx
                 case 1
@@ -224,7 +208,6 @@ classdef organism
                     obj = var_operator_3(obj, form, numn, eps, beta, copdel);
             end       
         end
-        
         
         
         % update transition matrix given points of mutation
@@ -266,7 +249,7 @@ classdef organism
         end
            
         
-        % compute fitness
+        % compute fitness as KLdiv btw organism and next environmental input 
         function [obj, f] = compute_fitness(obj, funct, data, eps)
             
             num_vis_units = max(size(data));
