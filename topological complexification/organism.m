@@ -3,6 +3,8 @@ classdef organism
     % topological variation only
     
     properties
+        % number of nodes in network
+        number_nodes
         % number of visible nodes
         num_visible_nodes
         % number of hidden nodes
@@ -15,10 +17,9 @@ classdef organism
         genotype_complexity
         % sample phenotypic complexity
         phenotype_complexity
-        % 1-D hole spectrum
+        % 1-D hole spectrum - number of paths of length k
         num_cycles
-        % number of nodes in network
-        number_nodes
+        
     end
     
     methods
@@ -43,6 +44,9 @@ classdef organism
         
         %% VAR I - add/delete edges
         function [obj] = var_operator_1(obj, num_edge, copdel)
+            
+%             disp(sprintf('VO_I_%d', copdel))        
+            
             % num_edge - number of edges added/deleted
             % copdel - copy or delete
             
@@ -69,6 +73,9 @@ classdef organism
 
         %% VAR II - add/delete nodes
         function [obj] = var_operator_2(obj, num_nodes, copdel)
+            
+%             disp(sprintf('VO_II_%d', copdel))
+
             % copdel - add or remove
             % num_nodes - number of nodes to be added/deleted
 
@@ -78,39 +85,45 @@ classdef organism
             rho = sum(funct_adj(:)>0) / numel(funct_adj);
             edge_dist = [sum(funct_adj) sum(funct_adj,2)'];
             % how many new edges are created?
-            num_new_edges = edge_dist(randi(length(edge_dist), 2*num_nodes));            % 
+            num_new_edges = edge_dist(randi(length(edge_dist), [2*num_nodes 1]));            
             
             switch copdel
                 case 1
                     for i = 1 : num_nodes
-                        obj.adjacency(onn+i, randi(onn, num_new_edges(i))) = 1;
-                        obj.adjacency(randi(onn, num_new_edges(i+1)), onn+i) = 1;
+                        obj.adjacency(onn+i, randi(onn, [num_new_edges(i) 1])) = 1;
+                        obj.adjacency(randi(onn, [num_new_edges(i+1) 1]), onn+i) = 1;
                         obj.adjacency(onn+i, onn+i) = rand(1) > (1-rho);
                         onn = onn+1;
                     end
-                    
-                case -1             
-                    % cannot delete kernel (visible) units - only hidden
-                    if num_nodes <= obj.number_nodes - obj.num_visible_nodes 
-                        indx = obj.num_visible_nodes + randi(obj.number_nodes - obj.num_visible_nodes, num_nodes);
+                                        
+                case -1                      
+                    % if no hidden nodes, add rather than delete
+                    if  obj.num_hidden_nodes == 0
+                        [obj] = var_operator_2(obj, num_nodes, 1);  
+                        copdel = 1;
                     else
-                        num_nodes2 = obj.number_nodes - obj.num_visible_nodes;
-                        if num_nodes2 == 0
-                            [obj] = var_operator_2(obj, num_nodes2, 1);
-                        else
-                            indx = obj.num_visible_nodes + randi(obj.number_nodes - obj.num_visible_nodes, num_nodes2);
-                            obj.adjacency(indx,indx) = [];
-                            obj.adjacency = [[obj.adjacency; zeros(indx, size(obj.adjacency,1))] zeros(size(obj.adjacency,1) + num_nodes, num_nodes)];
+                        % cannot delete kernel (visible) units - only hidden
+                        if num_nodes <= obj.num_hidden_nodes 
+                            indx = obj.num_visible_nodes + randi(obj.num_hidden_nodes , [num_nodes 1]);
+                            
+                        % if num_hidden_nodes < num_nodes    
+                        elseif num_nodes > obj.num_hidden_nodes 
+                            num_nodes = obj.num_hidden_nodes;
+                            indx = obj.num_visible_nodes + randi(obj.num_hidden_nodes, [num_nodes 1]);
                         end
-                        num_nodes = num_nodes2;
+                        
+                        obj.adjacency(indx,:) = [];
+                        obj.adjacency(:,indx) = [];
+                        obj.adjacency = [[obj.adjacency; zeros(length(indx), size(obj.adjacency,2))] zeros(size(obj.adjacency,1) + length(indx), length(indx))];
+                            
                     end
-
-                                  
+                                                   
             end                    
 
             obj.genotype_complexity = length(find(obj.adjacency(:)));
             
             obj.number_nodes = obj.number_nodes + copdel * num_nodes;
+            obj.num_hidden_nodes = obj.number_nodes - obj.num_visible_nodes;
 
         end  
         
@@ -118,6 +131,8 @@ classdef organism
         
         %% Var III - change in hidden unit topology by copying internal structure
         function [obj] = var_operator_3(obj, num_nodes, copdel)
+            
+%         disp(sprintf('VO_III_%d', copdel))
 
         % define stucture here as connected subgraph
         % can only delete hidden structure, but can copy any structure -
@@ -141,9 +156,6 @@ classdef organism
                     overlap = obj.adjacency(ind1,ind1);
                     
                     % randomly assign connections between copied structure and nodes copied from
-                    
-                    
-                    
                     X1 = funct_adj(ind1,:);
                     X1 = reshape(X1(randperm(numel(X1))), size(X1));
                     
@@ -170,6 +182,7 @@ classdef organism
                     elseif num_nodes == 0
                         
                         [obj] = var_operator_3(obj, num_nodes, copdel);
+                        copdel = 1;
                         
                     else
                         num_nodes = obj.number_nodes - obj.num_visible_nodes;
@@ -190,22 +203,20 @@ classdef organism
 
             obj.genotype_complexity = length(find(obj.adjacency(:)));
             obj.number_nodes = obj.number_nodes + copdel * num_nodes;
+           
             
         end
         
         
         %%
-        function [obj] = var_operator_distributed(obj, numn, maxK, P, copdelP)
+        function [obj] = var_operator_distributed(obj, numn, maxK, P, copdelP, calc_pc)
             % select above variational operators based on distribution P
             % form: structured vs unstructured
             % P - probability distribution over other operators in order
             % Pcopdel is the Pdist over delete/copy 
             % maxK - max length of walks through visible kernel - used to compute phenotype
-            
-            
-            % in updated version - have to feed probabilities through to
-            % here - sample and pass forward to mutate
-            
+            % calc_pc - controls calculation of phenotypic complexity - 1 compute, 0 don't
+                        
             indy = RouletteWheelSelection(copdelP);
             if indy == 1, copdel = -1; elseif indy == 2, copdel = 1; end 
             
@@ -224,7 +235,11 @@ classdef organism
                         
             [obj] = update_phenotype(obj, maxK);
             
-            % update phenotypic complexity                        
+            % update phenotypic complexity 
+            
+            if calc_pc
+                [obj] = sample_phenotypic_complexity( obj, 100, 100, 0.1, P, copdelP, numn , maxK);
+            end    
             
         end
 
@@ -254,17 +269,18 @@ classdef organism
                         A(i) = G(i,i);
                     end
                 end
+                
                 Q = Q + A(1:obj.num_visible_nodes);
             end
             
-            obj.phenotype = Q / sum(Q)
+            obj.phenotype = Q / sum(Q);
             
         end
         
         
         %% compute fitness
         function [obj, f] = compute_fitness(obj, funct, data )
-            
+
             switch funct
                 case 'kldiv'
                     f = exp(-real(sum((data+1e-8) .* log2((data+1e-8)./(obj.phenotype+1e-8)))));
@@ -284,7 +300,7 @@ classdef organism
         
         
         %% Phenotypic complexity
-        function [H] = sample_phenotypic_complexity( obj, Ntr, Nm, sigma, P, copdelP )
+        function [obj] = sample_phenotypic_complexity( obj, Ntr, Nm, sigma, P, copdelP, num_nodes, maxK )
         % Ntr - number of anchor points (centroids) in phenotype space - Each centers a Gaussian
         % Nm - number of mutations
         % hierarchical sampling under copdel and P.
@@ -295,18 +311,15 @@ classdef organism
         % anchor points within the simplex corresponding to the phenotype
         Q = abs(randn(D, Ntr));
         anchors = Q ./ repmat(sum(Q), [D 1]);
-        
+                
         % generate many candidate mutations - what are the corresponding phenotypes
-        prop_m = zeros(D, Nm);
         dist = zeros(Nm, Ntr);
 
         for nm = 1 : Nm
             % for each proposed mutation
-            org_copy = obj;
-            org_copy = var_operator_distributed(org_copy, num_nodes, maxK, P, copdelP);
-            org_copy = update_phenotype(obj, maxK);
-            prop_m(:, nm) = org_copy.phenotype;            
-            dist(nm, :) = vecnorm(anchors - repmat(prop_m(:,nm), [1 Ntr]));
+            org_copy = var_operator_distributed(obj, num_nodes, maxK, P, copdelP, 0);
+            org_copy = update_phenotype(org_copy, maxK);
+            dist(nm, :) = vecnorm(anchors - repmat(org_copy.phenotype, [1 Ntr]));
         end
 
 
@@ -320,7 +333,7 @@ classdef organism
 
         % octave implementation
         h1 = hist(samples, 20, 1);
-        H = -sum(h1 .* log2(h1));
+        obj.phenotype_complexity = -sum(h1 .* log2(h1));
 
         end
         

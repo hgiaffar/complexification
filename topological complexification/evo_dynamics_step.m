@@ -26,9 +26,21 @@ switch dynamics
         for ki = 1 : K
                          
             % death and reproduction, fitness proportionate selection
-            ind_repro = RouletteWheelSelection(abs(pop_fitness));
-            
-%            ind_repro = find(pop_fitness==max(pop_fitness));
+            if 1
+                ind_repro = RouletteWheelSelection(abs(pop_fitness/sum(pop_fitness)));            
+            else        % distort the above probabilities
+                selection = varargin{7};
+                select_pop_fitness = (exp(selection * pop_fitness) / sum(exp(selection * pop_fitness)));
+                ind_repro = RouletteWheelSelection(abs(select_pop_fitness));
+                
+            end
+            % strongest possible selection
+            ind_repro = find(pop_fitness==max(pop_fitness));
+
+%                 find([population(1:length(population)).fitness] == max([population(1:length(population)).fitness]))
+%                 ind_repro
+%                 find([population(1:length(population)).fitness] == max([population(1:length(population)).fitness])) == ind_repro
+                                                
             repro_org = population(ind_repro).organism;
                         
             switch varop
@@ -44,7 +56,9 @@ switch dynamics
                 case 4
                     maxK = varargin{5};
                     P = varargin{6};
-                    population(ind_death(ki)).organism = var_operator_distributed(repro_org, numn, maxK, P, copdel);
+                    calc_pc = varargin{8};
+                    population(ind_death(ki)).organism = var_operator_distributed(repro_org, numn, maxK, P, copdel, calc_pc);
+%                     population(ind_death(ki)).lineage = [population(ind_death(ki)).lineage population(ind_repro).lineage];
             end
         end       
                       
