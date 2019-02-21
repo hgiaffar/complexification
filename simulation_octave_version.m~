@@ -6,7 +6,7 @@ clear all
 
 % simulation
 T = 40000;              % length of simulation
-et = 1000;              % number of steps during which enviroment is constant
+et = 500;              % number of steps during which enviroment is constant
 no_orgs = 100;          % number of organisms
 Kc = 1;                 % number of k-cycle selections per timestep
 no_data_points = 16;    % size of the data

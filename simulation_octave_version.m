@@ -6,7 +6,7 @@ clear all
 
 % simulation
 T = 40000;              % length of simulation
-et = 1000;              % number of steps during which enviroment is constant
+et = 400;              % number of steps during which enviroment is constant
 no_orgs = 100;          % number of organisms
 Kc = 1;                 % number of k-cycle selections per timestep
 no_data_points = 16;    % size of the data
@@ -33,7 +33,7 @@ envt_type = 'complex';          % predefined variables for environment generatio
 no_samples = ceil(T/et);        % number of environments generated from the hierarchical generative model
 tree_type = 'binary';           % type of tree structure  
 sigma_envt = 0.2;               % variance of the gaussian centered at 0 for each edge in the graph
-beta_envt = 2;                  % softmax parameter
+beta_envt = 2;                  % softmax parameter over generated environment
 
 % report during simulation
 reporting_interval = 100;       % for updating plots and calculating phenotypic complexity
