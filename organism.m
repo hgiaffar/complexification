@@ -1,213 +1,222 @@
 classdef organism
     
+    % topological variation only
+    
     properties
-        % weight matrix
-        weights
-        % transition matrix
-        transition_matrix
-        % static distribution
-        stat_dist
+        % number of nodes in network
+        number_nodes
+        % number of visible nodes
+        num_visible_nodes
         % number of hidden nodes
         num_hidden_nodes
-        % adjacency matrix
+        % adjacency matrix - 'genotype'
         adjacency
-        % full stat_dist - for optimisation via gd
-        stat_dist_full
+        % phenotype
+        phenotype
         % genotypic complexity
         genotype_complexity
+        % sample phenotypic complexity
+        phenotype_complexity
+        % 1-D hole spectrum - number of paths of length k
+        num_cycles
+        
     end
     
     methods
         
-        % initialise weights and transition matrix
-        
-        function [obj] = initialise_organism(obj, eps, beta, nx, mx, rho, nhu)
+        %% initialise organism        
+        function [obj] = initialise_organism(obj, data_size, rho, nhu, full_size)
             % obj - organism
-            % eps - epsilon for weight to transition update
-            % beta - temperature
-            % nx, mx = size 1st, 2nd dim of environmental data
+            % data_size - fixed size of data
             % rho - hard density of connections in T/V - defines adjacency mat
             % nhu - number of hidden units upon initialisation
+            % full_size - preallocate memory
             
-            states = (nx * mx) + nhu;
-            T = rand(states);
-            A = random_fsparse_mat(states, rho);
-            T = T.*A;
-            V = zeros(size(T));
-
-            for j = 1 : states
-                su = sum(exp(beta * T(:,j)));
-                for i = 1 : states
-                    if T(i,j) ~= 0
-                        V(i,j) = ((1-eps) * exp(beta * T(i,j)) / su ) + eps; 
-                    end
-                end
-                V(:,j) = V(:,j)/sum(V(:,j));
-            end
-            
-            
-            obj.weights = T;
-            obj.transition_matrix = V;
-            obj.adjacency = A;
-
+            obj.number_nodes = data_size + nhu;
+            A = random_fsparse_mat(obj.number_nodes, rho);
+            obj.adjacency = [[A zeros(obj.number_nodes, full_size-data_size)]; [zeros(full_size-data_size) zeros(full_size-data_size, data_size)]];
             obj.genotype_complexity = length(find(obj.adjacency(:)));
+            obj.num_visible_nodes = data_size;
+            obj.phenotype = zeros(data_size,1);
             
         end
         
         
-        % first variational operator - no change to topology, mutate weights
-        function [obj] = var_operator_1(obj, eta, eps, beta)
-            % eta - mutation scaling parameter
+        %% VAR I - add/delete edges
+        function [obj] = var_operator_1(obj, num_edge, copdel)
             
-            wmax = 1;
+%             disp(sprintf('VO_I_%d', copdel))        
             
-            indx = randi(size(obj.weights,1), [2 1]);         % select indices to mutate
-            obj.weights(indx(1), indx(2)) = obj.weights(indx(1), indx(2)) + (randn * eta);
-
-            obj.weights(indx(1), indx(2)) = abs(min(obj.weights(indx(1), indx(2)), wmax));               % bound weights
+            % num_edge - number of edges added/deleted
+            % copdel - copy or delete
             
-            obj = update_transitions(obj, indx, eps, beta);
-
-            obj.genotype_complexity = length(find(obj.adjacency(:)));
-
-        end
-
-        
-        function [obj] = var_operator_2(obj, data, steps, eps, lr, beta, copdel)
-            % add/delete edge
-            % copdel - add or remove
-            
-            [ri, ci] = find(obj.adjacency);
-            [rii, cii] = find(~obj.adjacency);
+            % functional adjacency
+            funct_adj = obj.adjacency(1:obj.number_nodes, 1:obj.number_nodes);
             
             switch copdel
                 case 1
-                    indy = randperm(length(ri), 1);
-                    indx = randperm(length(rii), 1);
-                    obj.weights(rii(indx), cii(indx)) = obj.weights(ri(indx), ci(indx));
-                    obj.adjacency(rii(indx), cii(indx)) = 1;
-                    obj = update_transitions(obj, 0, eps, beta);
+
+                    [indx, indy] = find(~funct_adj);
+                    indi = randi(length(indx), num_edge);
+                    obj.adjacency(indx(indi), indy(indi)) = 1;
                     
                 case -1
-                    indx = randperm(length(ri), 1);
-                    obj.weights(ri(indx), ci(indx)) = 0;
-                    obj.adjacency(ri(indx), ci(indx)) = 0;
-                    obj = update_transitions(obj, 0, eps, beta);
+                    
+                    [indx, indy] = find(funct_adj);
+                    indi = randi(length(indx), num_edge);
+                    obj.adjacency(indx(indi), indy(indi)) = 0;
+            end
+            
+            obj.genotype_complexity = length(find(obj.adjacency(:)));
+            
+        end
+
+        %% VAR II - add/delete nodes
+        function [obj] = var_operator_2(obj, num_nodes, copdel)
+            
+%             disp(sprintf('VO_II_%d', copdel))
+
+            % copdel - add or remove
+            % num_nodes - number of nodes to be added/deleted
+
+            onn = obj.number_nodes;
+            funct_adj = obj.adjacency(1:onn, 1:onn);
+            
+            rho = sum(funct_adj(:)>0) / numel(funct_adj);
+            edge_dist = [sum(funct_adj) sum(funct_adj,2)'];
+            % how many new edges are created?
+            num_new_edges = edge_dist(randi(length(edge_dist), [2*num_nodes 1]));            
+            
+            switch copdel
+                case 1
+                    for i = 1 : num_nodes
+                        obj.adjacency(onn+i, randi(onn, [num_new_edges(i) 1])) = 1;
+                        obj.adjacency(randi(onn, [num_new_edges(i+1) 1]), onn+i) = 1;
+                        obj.adjacency(onn+i, onn+i) = rand(1) > (1-rho);
+                        onn = onn+1;
+                    end
+                                        
+                case -1                      
+                    % if no hidden nodes, add rather than delete
+                    if  obj.num_hidden_nodes == 0
+                        [obj] = var_operator_2(obj, num_nodes, 1);  
+                        copdel = 1;
+                    else
+                        % cannot delete kernel (visible) units - only hidden
+                        if num_nodes <= obj.num_hidden_nodes 
+                            indx = obj.num_visible_nodes + randi(obj.num_hidden_nodes , [num_nodes 1]);
+                            
+                        % if num_hidden_nodes < num_nodes    
+                        elseif num_nodes > obj.num_hidden_nodes 
+                            num_nodes = obj.num_hidden_nodes;
+                            indx = obj.num_visible_nodes + randi(obj.num_hidden_nodes, [num_nodes 1]);
+                        end
+                        
+                        obj.adjacency(indx,:) = [];
+                        obj.adjacency(:,indx) = [];
+                        obj.adjacency = [[obj.adjacency; zeros(length(indx), size(obj.adjacency,2))] zeros(size(obj.adjacency,1) + length(indx), length(indx))];
+                            
+                    end
+                                                   
             end                    
 
             obj.genotype_complexity = length(find(obj.adjacency(:)));
+            
+            obj.number_nodes = obj.number_nodes + copdel * num_nodes;
+            obj.num_hidden_nodes = obj.number_nodes - obj.num_visible_nodes;
 
         end  
         
         
         
-        % third variational operator - change in hidden unit topology by copying internal structure
-        function [obj] = var_operator_3(obj, form, numn, eps, beta, copdel)
-            % form: structured - whole subnetwork copied, inc. weights. unstructured - weights sampled from
-            % network distribution
-            % numn - size of substructure copied/deleted
-            % copdel - copied/deleted
+        %% Var III - change in hidden unit topology by copying internal structure
+        function [obj] = var_operator_3(obj, num_nodes, copdel)
             
-            num_nodes = size(obj.weights,1);
-            wmax = 1;
+%         disp(sprintf('VO_III_%d', copdel))
+
+        % define stucture here as connected subgraph
+        % can only delete hidden structure, but can copy any structure -
+        % this asymmetry is subtle but might be important....
+        
+            onn = obj.number_nodes;
+            funct_adj = obj.adjacency(1:onn, 1:onn);
             
             switch copdel
                 
                 case 1                  % add substructure
-                    switch form
-                        case 'structured'
-                            % chose random index
-                            ind_copy = randperm(num_nodes, numn);
-
-                            while ~isempty(ind_copy)
-                                % copy weights and adjacency as are, randomly generating the missing values
-                                cent = obj.adjacency(ind_copy(1),ind_copy(1)); 
-                                lef = [obj.adjacency(ind_copy(1),:) cent];
-                                rig = obj.adjacency(:,ind_copy(1));
-                                density = sum(obj.adjacency) / numel(obj.adjacency);
-                                missing = rand(2,1) > (1-density);
-
-                                obj.adjacency = [[obj.adjacency rig]; lef];
-                                obj.adjacency(end, ind_copy(1)) = missing(1); 
-                                obj.adjacency(ind_copy(1), end) = missing(2);
-
-                                cent = obj.weights(ind_copy(1),ind_copy(1)); 
-                                lef = [obj.weights(ind_copy(1),:) cent];
-                                rig = obj.weights(:,ind_copy(1));
-
-                                obj.weights = [[obj.weights rig]; lef];
-                                obj.weights(end, ind_copy(1)) = rand(1); 
-                                obj.weights(ind_copy(1), end) = rand(1);                                     
-
-                                obj.weights = abs(min(obj.weights, wmax));
-                                obj.weights = obj.weights .* obj.adjacency;
-
-                                obj = update_transitions(obj, 0, eps, beta);
-
-                                if sum(isnan(obj.weights(:))) > 0
-                                    disp('fucked weights')
-                                elseif sum(isnan(obj.transition_matrix(:))) > 0
-                                    disp('fucked transitions')
-                                end
-
-                               ind_copy(1) = []; 
-                            end
-
-                        case 'unstructured'
-
-                            ind_copy = randperm(num_nodes, numn);
-                            density = sum(obj.adjacency(:)) / numel(obj.adjacency);
-                            no_unts = size(obj.adjacency,1);
-
-                            lef = [rand([(no_unts + 1) 1]) > (1-density)]';
-                            rig = [rand(no_unts,1) > (1-density)];
-
-                            obj.adjacency = [[obj.adjacency rig]; lef];
-
-                            obj.weights = [[obj.weights rand(no_unts, 1)]; rand(1,no_unts+1)];
-                            obj.weights = obj.weights .* obj.adjacency;
-
-                            obj = update_transitions(obj, 0, eps, beta);
-                           
-                    end
                     
-                    % change the number of hidden nodes
-                    obj.num_hidden_nodes = obj.num_hidden_nodes + numn;
+                    % define substructure to be copied
+                    ind1 = randi(obj.number_nodes,1);
+                    if num_nodes > 1
+                        J = funct_adj^num_nodes;
+                        jj = J(ind1,:); jj(ind1) = 0; indj = find(jj); ind2 = randi(length(indj), num_nodes-1);
+                        ind1 = [ind1 indj(ind2)];
+                    end
+                                        
+                    overlap = obj.adjacency(ind1,ind1);
+                    
+                    % randomly assign connections between copied structure and nodes copied from
+                    X1 = funct_adj(ind1,:);
+                    X1 = reshape(X1(randperm(numel(X1))), size(X1));
+                    
+                    X2 = funct_adj(:,ind1);
+                    X2 = reshape(X2(randperm(numel(X2))), size(X2));
+                    
+                    
+                    obj.adjacency(onn+1 : onn + num_nodes, 1 : onn) = X1;
+                    obj.adjacency(1 : onn, onn+1 : onn + num_nodes) = X2;
+                    obj.adjacency(onn+1 : onn + num_nodes, onn+1 : onn + num_nodes) = overlap;   
                     
                 case -1             % delete substructure
                     
-                    if numn <= obj.num_hidden_nodes
-                        ind_copy = randperm(obj.num_hidden_nodes, numn) + length(obj.stat_dist);
-                        obj.weights(ind_copy, :) = [];
-                        obj.weights(:, ind_copy) = [];
-                        obj.adjacency(ind_copy, :) = [];                        
-                        obj.adjacency(:, ind_copy) = [];                        
-                        obj = update_transitions(obj, 0, eps, beta);
-                        obj.num_hidden_nodes = obj.num_hidden_nodes - numn;
+                    % cannot delete kernel (visible) units - only hidden
+                    if num_nodes <= obj.number_nodes - obj.num_visible_nodes 
+                        ind1 = obj.num_visible_nodes + randi(obj.number_nodes - obj.num_visible_nodes, 1);          % have to ensure connected subgraph
+                        indz = [[1:obj.num_visible_nodes] ind1];
+                        if num_nodes > 1
+                            J = funct_adj^num_nodes;
+                            jj = J(ind1,:); jj(indz) = 0; indj = find(jj); ind2 = randi(length(indj), num_nodes-1);
+                            ind1 = [ind1 indj(ind2)];
+                        end 
+                        
+                    elseif num_nodes == 0
+                        
+                        [obj] = var_operator_3(obj, num_nodes, copdel);
+                        copdel = 1;
+                        
                     else
-                        numn = obj.num_hidden_nodes;
-                        ind_copy = randperm(obj.num_hidden_nodes, numn) + length(obj.stat_dist);
-                        obj.weights(ind_copy, :) = [];
-                        obj.weights(:, ind_copy) = [];
-                        obj.adjacency(ind_copy, :) = [];                                                
-                        obj.adjacency(:, ind_copy) = [];                                                
-                        obj = update_transitions(obj, 0, eps, beta);
-                        obj.num_hidden_nodes = obj.num_hidden_nodes - numn;                  
+                        num_nodes = obj.number_nodes - obj.num_visible_nodes;
+                        ind1 = obj.num_visible_nodes + 1 : obj.number_nodes;
                     end
-                end
+                   
+                    
+                    if num_nodes ~= 0
+                        obj.adjacency(ind1, :) = [];
+                        obj.adjacency(:, ind1) = [];
+
+                        % repad 
+                            obj.adjacency = [[obj.adjacency; zeros(num_nodes, size(obj.adjacency,1) + num_nodes - 1)] ...
+                            zeros(size(obj.adjacency,1) + num_nodes, num_nodes)];
+                    end
+                    
+            end
 
             obj.genotype_complexity = length(find(obj.adjacency(:)));
-
+            obj.number_nodes = obj.number_nodes + copdel * num_nodes;
+           
+            
         end
         
         
-        
-        function [obj] = var_operator_distributed(obj, form, numn, eps, eta, beta, P, copdelP)
+        %%
+        function [obj] = var_operator_distributed(obj, numn, maxK, P, copdelP, calc_pc)
             % select above variational operators based on distribution P
             % form: structured vs unstructured
             % P - probability distribution over other operators in order
             % Pcopdel is the Pdist over delete/copy 
-            
+            % maxK - max length of walks through visible kernel - used to compute phenotype
+            % calc_pc - controls calculation of phenotypic complexity - 1 compute, 0 don't
+                        
             indy = RouletteWheelSelection(copdelP);
             if indy == 1, copdel = -1; elseif indy == 2, copdel = 1; end 
             
@@ -215,79 +224,120 @@ classdef organism
                         
             switch indx
                 case 1
-                     obj = var_operator_1(obj, eta, eps, beta);
-                     
+                    obj = var_operator_1(obj, numn, copdel);
                 case 2
-                     obj = var_operator_2(obj, data, steps, eps, lr, beta, copdel);
-                     
+                    obj = var_operator_2(obj, numn, copdel);
                 case 3
-                    obj = var_operator_3(obj, form, numn, eps, beta, copdel);
+                    obj = var_operator_3(obj, numn, copdel);
             end       
-        end
-        
-        
-        
-        % update transition matrix given points of mutation
-        function [obj] = update_transitions(obj, indx, eps, beta)
-            % indx - index of mutation - recompute only relevant column
-            % indx == 0 - recompute whole transition matrix as mutation is topological
             
-            if indx > 0
-                 suma = sum(exp(beta * obj.weights(:,indx(2))));  
-                 for i = 1 : size(obj.weights,1)
-                    obj.transition_matrix(i,indx(2)) = ((1-eps) * exp(beta * obj.weights(i, indx(2))) / suma ) + eps; 
-                 end
-            elseif indx == 0
-                V = zeros(size(obj.weights));
-                for j = 1 : size(obj.weights,2)
-                    su = sum(exp(beta * obj.weights(:,j)));
-                    for i = 1 : size(obj.weights,1)
-                        V(i,j) = ((1-eps) * exp(beta * obj.weights(i,j)) / su ) + eps; 
-                    end 
+            % update phenotype following mutation
+                        
+            [obj] = update_phenotype(obj, maxK);
+            
+            % update phenotypic complexity 
+            
+            if calc_pc
+                [obj] = sample_phenotypic_complexity( obj, 100, 100, 0.1, P, copdelP, numn , maxK);
+            end    
+            
+        end
+
+           
+
+        %% NEW - to remove paths which cross through the initial/terminal node
+        function [obj] = update_phenotype(obj, maxK)
+            % phenotype is size obj.num_visible_nodes - each element corresponds to the number of paths of length <maxK that
+            % start and finish at node i (visible nodes), but don't pass through i as an intermediate node
+
+            onn = obj.number_nodes;
+            funct_adj = obj.adjacency(1:onn, 1:onn);
+            
+            Q = zeros(obj.num_visible_nodes,1);
+            for k = 2 : maxK
+
+                no_internal_mats = k - 2;
+                if no_internal_mats == 0
+                    A = diag(funct_adj^2);
+                else
+                    A = zeros(obj.num_visible_nodes,1);
+                    for i = 1 : obj.num_visible_nodes
+                        At = funct_adj;
+                        At(i,:) = 0;
+                        At(:,i) = 0;                    
+                        G = funct_adj * (At)^(k-2) * funct_adj;             % no T
+                        A(i) = G(i,i);
+                    end
                 end
-                obj.transition_matrix = V;
-            end 
-        end
-        
-        
-        % compute stationary distribution of HMM
-        function [stat_dist, stat_dist_full] = compute_stationary_distribution(obj, eps, num_vis_units)
-           
-            [Evec, Eval] = eigs(obj.transition_matrix);
-            
-            if 1-eps <= Eval(1) <= 1+eps
-               Eval(1);
-               stat_dist = real(Evec(:,1)); 
-               stat_dist = stat_dist(1:num_vis_units)/sum(stat_dist(1:num_vis_units));
-               stat_dist_full = real(Evec(:,1));
-            else
-                error('stationary distribution issue')
+                
+                Q = Q + A(1:obj.num_visible_nodes);
             end
+            
+            obj.phenotype = Q / sum(Q);
+            
         end
-           
         
-        % compute fitness
-        function [obj, f] = compute_fitness(obj, funct, data, eps)
-            
-            num_vis_units = max(size(data));
         
-            [obj.stat_dist, obj.stat_dist_full] = compute_stationary_distribution(obj, eps, num_vis_units);            % phenotype
-            
+        %% compute fitness
+        function [obj, f] = compute_fitness(obj, funct, data )
+
             switch funct
                 case 'kldiv'
-                    f = exp(-real(sum((data+1e-8) .* log2((data+1e-8)./(obj.stat_dist+1e-8)))));
+                    f = exp(-real(sum((data+1e-8) .* log2((data+1e-8)./(obj.phenotype+1e-8)))));
 
                 case 'l1norm'
                     % L1 norm 
-                    f = mean(abs(obj.stat_dist - data));
+                    f = 1 - sum(abs(obj.phenotype - data));
             end
             
-            obj.num_hidden_nodes = size(obj.weights,1) - max(size(data));
+            obj.num_hidden_nodes = obj.number_nodes - obj.num_visible_nodes;
             
             if f == Inf
                 disp('fitness: inf')
             end
         end
+        
+        
+        
+        %% Phenotypic complexity
+        function [obj] = sample_phenotypic_complexity( obj, Ntr, Nm, sigma, P, copdelP, num_nodes, maxK )
+        % Ntr - number of anchor points (centroids) in phenotype space - Each centers a Gaussian
+        % Nm - number of mutations
+        % hierarchical sampling under copdel and P.
+
+        % dimension of data simplex    
+        D = obj.num_visible_nodes;
+
+        % anchor points within the simplex corresponding to the phenotype
+        Q = abs(randn(D, Ntr));
+        anchors = Q ./ repmat(sum(Q), [D 1]);
+                
+        % generate many candidate mutations - what are the corresponding phenotypes
+        dist = zeros(Nm, Ntr);
+
+        for nm = 1 : Nm
+            % for each proposed mutation
+            org_copy = var_operator_distributed(obj, num_nodes, maxK, P, copdelP, 0);
+            org_copy = update_phenotype(org_copy, maxK);
+            dist(nm, :) = vecnorm(anchors - repmat(org_copy.phenotype, [1 Ntr]));
+        end
+
+
+        f = @(x, sigma, dim) (1/sqrt(sigma*((2*pi)^dim)) * exp(-(1/(2*sigma))*x.^2));
+
+        X = f(dist, sigma, D);
+        samples = sum(X,2);
+
+        % Sturges? rule is popular due to its simplicity. It chooses the number of bins to be ceil(1 + log2(numel(X))).
+        % h1 = histogram(samples, 'BinMethod', 'sturges');
+
+        % octave implementation
+        h1 = hist(samples, 20, 1);
+        obj.phenotype_complexity = -sum(h1 .* log2(h1));
+
+        end
+        
+        
             
     end
 end

@@ -23,11 +23,13 @@ X = f(D, sigma, siz_data-1);
 samples = sum(D,2);
 
 % Sturges? rule is popular due to its simplicity. It chooses the number of bins to be ceil(1 + log2(numel(X))).
-h1 = histogram(samples, 'BinMethod', 'sturges');
+%h1 = histogram(samples, 'BinMethod', 'sturges');
+%vals = (h1.Values+1e-8)/sum(h1.Values+1e-8);
+%H = -sum(vals .* log2(vals));
+%close
 
-vals = (h1.Values+1e-8)/sum(h1.Values+1e-8);
-
-H = -sum(vals .* log2(vals));
-close
+% octave implementation
+h1 = hist(samples, 20, 1);
+H = -sum(h1 .* log2(h1));
 
 end
