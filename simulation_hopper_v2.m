@@ -13,9 +13,8 @@ switch envt_type
     case 'simple'
         level_no = 1;
         branch_no = no_data_points;
-    case 'intermediate'
-        level_no = 2;
-        branch_no = 4;
+        environment = abs(randn(no_data_points, no_samples));
+        environment = (environment ./ repmat(sum(environment), [no_data_points 1]))';
     case 'complex'
         level_no = 4;
         branch_no = 2;
@@ -38,6 +37,7 @@ save_network = struct();            % save intermediate fittest weights for figu
 for i = 1 : no_orgs
     population(i).organism = initialise_organism(O, no_data_points, graph_density, no_hidden_units, preall_size);
     population(i).lineage = i;
+    population(i).phenotype_complexity = [];
 end
 
 hh =  findobj('type','figure');
@@ -90,10 +90,10 @@ for t = 1 : T
             drawnow
             
          % compute phenotypic complexity for the population every reporting interval
-         if 0
+         if 1
          for i1 = 1 : no_orgs
-            population(i1).phenotype_complexity(c) = ...
-                sample_phenotypic_complexity( population(i1).organism, num_samples_pc, num_mutations_pc, sigma_pc, P, copdelP, numn, maxK );
+                sample_phenotypic_complexity( population(i1).organism, num_samples_pc, num_mutations_pc, sigma_pc, P, copdelP, numn, maxK, data );
+                population(i1).phenotype_complexity = [population(i1).phenotype_complexity population(i1).organism.phenotype_complexity];
          end, end
          
 %         subplot(2,2,4), plot(1:c,mean([population(i1).phenotype_complexity(c)]))
@@ -162,8 +162,8 @@ end
 %         yyaxis right, plot(GC), ylabel('genotypic complexity')
 
 
-G1 = digraph(save_network.first_network > 0.5);
-G2 = digraph(save_network.middle_network > 0.5);
-G3 = digraph(save_network.final_network > 0.5);
+% G1 = digraph(save_network.first_network > 0.5);
+% G2 = digraph(save_network.middle_network > 0.5);
+% G3 = digraph(save_network.final_network > 0.5);
 
 

@@ -7,8 +7,7 @@ pop_fitness = [population(1:no_orgs).fitness];          % vector of organism fit
 if mean(pop_fitness) == 0
     pop_fitness = pop_fitness + rand(size(pop_fitness));
 else
-    pop_fitness = pop_fitness - min(pop_fitness);
-    pop_fitness = pop_fitness / max(pop_fitness);
+    pop_fitness = 
 end
 
 % rng('shuffle')                                          % shuffle random no gen
@@ -38,7 +37,7 @@ switch dynamics
                 
             end
             % strongest possible selection
-            ind_repro = find(pop_fitness==max(pop_fitness));
+%             ind_repro = find(pop_fitness==max(pop_fitness));
 
 %                 find([population(1:length(population)).fitness] == max([population(1:length(population)).fitness]))
 %                 ind_repro
@@ -61,7 +60,7 @@ switch dynamics
                     P = varargin{6};
                     calc_pc = varargin{8};
                     population(ind_death(ki)).organism = var_operator_distributed(repro_org, numn, maxK, P, copdel, calc_pc);
-%                     population(ind_death(ki)).lineage = [population(ind_death(ki)).lineage population(ind_repro).lineage];
+                    population(ind_death(ki)).lineage = [population(ind_death(ki)).lineage population(ind_repro).lineage];
             end
         end       
                       

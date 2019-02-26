@@ -17,8 +17,6 @@ classdef organism
         genotype_complexity
         % sample phenotypic complexity
         phenotype_complexity
-        % inter phenotype distance / inter sample distance
-        phenotype_complexity_dist
         % 1-D hole spectrum - number of paths of length k
         num_cycles
         
@@ -352,7 +350,7 @@ classdef organism
         obj.phenotype_complexity = -sum(h1 .* log2(h1)) / Zn;
         
         %% should normalise inter phenotype distance by the average distance between sample points
-        obj.phenotype_complexity_dist = mean(pdist(orgphen))/mean(pdist(anchors'));
+        obj.phenotype_complemean(pdist(orgphen))/mean(pdist(anchors'));
         
         end        
         
